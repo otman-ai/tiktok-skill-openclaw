@@ -15,14 +15,12 @@ What this skill contains
 -----------------------
 - `tiktok_content_gen.py` — orchestrator: creates hook, locked architecture, images, captions and can upload a draft.
 - `postiz_api_integration.py` — small Postiz client used to upload media and create drafts (keeps drafts private by default).
-- `scripts/generate.py` — thin CLI wrapper to run generation locally.
 - `scripts/upload.py` — CLI wrapper to upload generated images and create a draft.
 - `requirements.txt` — Python dependencies.
+- `scripts/generate_image.py` - CLI that generate image and added text overlay if available : usage: scripts/generate_image.py [-h] [--out-dir OUT_DIR] [--filename FILENAME] [--size SIZE] [--hook HOOK] prompt
 
-Inputs / outputs (contract)
+The output is image generated and saved to the out dir
 --------------------------
-- Inputs: target persona/topic, optional prompt seeds, number of slides (default 6), style hints.
-- Outputs: `images/final_slide_{i}.png`, `caption.txt`, optional Postiz draft (returns draft id/url).
 
 Security & cost notes
 ---------------------

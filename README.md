@@ -23,7 +23,7 @@ $env:POSTIZ_API_KEY = 'postiz-...'
 3. Generate locally (uses placeholder images if no OPENAI_API_KEY):
 
 ```powershell
-python scripts\generate.py "small kitchen makeover" --out images --slides 6
+python scripts\generate-_image.py "small kitchen makeover" --out-dir images
 ```
 
 4. Upload and create draft (Postiz service must be configured):

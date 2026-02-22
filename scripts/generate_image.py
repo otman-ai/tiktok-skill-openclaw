@@ -1,6 +1,7 @@
 import os
 import base64
 import argparse
+import textwrap
 from pathlib import Path
 import requests
 from PIL import Image, ImageDraw, ImageFont
@@ -79,38 +80,112 @@ def add_text_overlay(image_path: str, text: str, output_path: str, font_size_per
     img = Image.open(image_path).convert("RGBA")
     draw = ImageDraw.Draw(img)
     width, height = img.size
-
+    # choose a readable font from the system if available
     font_size = int(height * font_size_percent)
-    try:
-        font = ImageFont.truetype("DejaVuSans-Bold.ttf", font_size)
-    except Exception:
-        try:
-            font = ImageFont.truetype("arial.ttf", font_size)
-        except Exception:
-            font = ImageFont.load_default()
 
+    def find_system_font(keywords):
+        # search common font directories for files matching any keyword
+        font_dirs = [
+            os.path.join(os.path.sep, 'usr', 'share', 'fonts'),
+            os.path.join(os.path.sep, 'usr', 'local', 'share', 'fonts'),
+            os.path.join(os.path.expanduser('~'), '.local', 'share', 'fonts'),
+        ]
+        # Windows fonts dir
+        if os.name == 'nt':
+            font_dirs.append(os.path.join(os.environ.get('WINDIR', 'C:\\Windows'), 'Fonts'))
+
+        for d in font_dirs:
+            if not os.path.isdir(d):
+                continue
+            try:
+                for fname in os.listdir(d):
+                    lf = fname.lower()
+                    for kw in keywords:
+                        if kw in lf and lf.endswith(('.ttf', '.otf')):
+                            return os.path.join(d, fname)
+            except Exception:
+                continue
+        return None
+
+    # Preferred font keywords (in order)
+    preferred = ['impact', 'arialbd', 'arial', 'dejavusans', 'segoeui', 'roboto', 'montserrat']
+    font_path = find_system_font(preferred)
+    try:
+        if font_path:
+            font = ImageFont.truetype(font_path, font_size)
+        else:
+            # fallbacks by family name (Pillow will try to resolve)
+            try:
+                font = ImageFont.truetype('arial.ttf', font_size)
+            except Exception:
+                font = ImageFont.load_default()
+    except Exception:
+        font = ImageFont.load_default()
+
+    # Wrap text into lines that fit within max_width
+    max_width = int(width * 0.86)
     words = text.split()
     lines = []
     cur = []
     for w in words:
         cur.append(w)
-        sample = " ".join(cur)
+        sample = ' '.join(cur)
         bbox = draw.textbbox((0, 0), sample, font=font)
-        if bbox[2] - bbox[0] > width * 0.8:
+        if bbox[2] - bbox[0] > max_width:
             cur.pop()
-            lines.append(" ".join(cur))
+            if cur:
+                lines.append(' '.join(cur))
             cur = [w]
     if cur:
-        lines.append(" ".join(cur))
+        lines.append(' '.join(cur))
 
-    y_text = int(height * 0.35)
+    # calculate block size
+    line_heights = []
+    line_widths = []
     for line in lines:
+        bbox = draw.textbbox((0, 0), line, font=font)
+        line_widths.append(bbox[2] - bbox[0])
+        line_heights.append(bbox[3] - bbox[1])
+
+    if not lines:
+        lines = [text]
+        bbox = draw.textbbox((0, 0), text, font=font)
+        line_widths = [bbox[2] - bbox[0]]
+        line_heights = [bbox[3] - bbox[1]]
+
+    block_width = max(line_widths)
+    block_height = sum(line_heights) + (len(lines) - 1) * 6
+
+    # position block around upper/middle area
+    y_text = int(height * 0.22)
+    x_text = (width - block_width) // 2
+
+    # draw semi-transparent rounded rectangle behind text for legibility
+    padding_x = int(width * 0.03)
+    padding_y = int(font_size * 0.45)
+    rect_x0 = x_text - padding_x
+    rect_y0 = y_text - padding_y
+    rect_x1 = x_text + block_width + padding_x
+    rect_y1 = y_text + block_height + padding_y
+
+    # Ensure coordinates are ints and within image
+    rect = [int(max(0, rect_x0)), int(max(0, rect_y0)), int(min(width, rect_x1)), int(min(height, rect_y1))]
+
+    try:
+        # semi-transparent black
+        draw.rounded_rectangle(rect, radius=12, fill=(0, 0, 0, 180))
+    except Exception:
+        draw.rectangle(rect, fill=(0, 0, 0, 180))
+
+    # draw each line
+    cur_y = y_text
+    for idx, line in enumerate(lines):
         bbox = draw.textbbox((0, 0), line, font=font)
         line_w = bbox[2] - bbox[0]
         line_h = bbox[3] - bbox[1]
         x = (width - line_w) // 2
-        draw.text((x, y_text), line, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0))
-        y_text += line_h + 6
+        draw.text((x, cur_y), line, font=font, fill=(255, 255, 255, 255), stroke_width=2, stroke_fill=(0, 0, 0, 255))
+        cur_y += line_h + 6
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
